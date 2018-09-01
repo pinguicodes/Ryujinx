@@ -26,7 +26,7 @@ namespace Ryujinx.HLE.HOS.Services
 {
     static class ServiceFactory
     {
-        public static IpcService MakeService(string Name)
+        public static IpcService MakeService(Horizon System, string Name)
         {
             switch (Name)
             {
@@ -91,7 +91,7 @@ namespace Ryujinx.HLE.HOS.Services
                     return new IFileSystemProxy();
 
                 case "hid":
-                    return new IHidServer();
+                    return new IHidServer(System);
 
                 case "lm":
                     return new ILogService();
@@ -115,10 +115,10 @@ namespace Ryujinx.HLE.HOS.Services
                     return new IVulnerabilityManagerInterface();
 
                 case "nvdrv":
-                    return new INvDrvServices();
+                    return new INvDrvServices(System);
 
                 case "nvdrv:a":
-                    return new INvDrvServices();
+                    return new INvDrvServices(System);
 
                 case "pctl:s":
                     return new IParentalControlServiceFactory();

@@ -63,7 +63,7 @@ namespace Ryujinx.HLE.HOS.Services.Android
 
         private BufferEntry[] BufferQueue;
 
-        private ManualResetEvent WaitBufferFree;
+        private AutoResetEvent WaitBufferFree;
 
         private bool Disposed;
 
@@ -87,7 +87,7 @@ namespace Ryujinx.HLE.HOS.Services.Android
 
             BufferQueue = new BufferEntry[0x40];
 
-            WaitBufferFree = new ManualResetEvent(false);
+            WaitBufferFree = new AutoResetEvent(false);
         }
 
         public long ProcessParcelRequest(ServiceCtx Context, byte[] ParcelData, int Code)
@@ -214,6 +214,8 @@ namespace Ryujinx.HLE.HOS.Services.Android
 
             BufferQueue[Slot].State = BufferState.Free;
 
+            WaitBufferFree.Set();
+
             return MakeReplyParcel(Context, 0);
         }
 
@@ -331,12 +333,9 @@ namespace Ryujinx.HLE.HOS.Services.Android
         {
             BufferQueue[Slot].State = BufferState.Free;
 
-            ReleaseEvent.WaitEvent.Set();
+            ReleaseEvent.Signal();
 
-            lock (WaitBufferFree)
-            {
-                WaitBufferFree.Set();
-            }
+            WaitBufferFree.Set();
         }
 
         private int GetFreeSlotBlocking(int Width, int Height)
@@ -345,19 +344,14 @@ namespace Ryujinx.HLE.HOS.Services.Android
 
             do
             {
-                lock (WaitBufferFree)
+                if ((Slot = GetFreeSlot(Width, Height)) != -1)
                 {
-                    if ((Slot = GetFreeSlot(Width, Height)) != -1)
-                    {
-                        break;
-                    }
+                    break;
+                }
 
-                    if (Disposed)
-                    {
-                        break;
-                    }
-
-                    WaitBufferFree.Reset();
+                if (Disposed)
+                {
+                    break;
                 }
 
                 WaitBufferFree.WaitOne();
@@ -404,11 +398,7 @@ namespace Ryujinx.HLE.HOS.Services.Android
             {
                 Disposed = true;
 
-                lock (WaitBufferFree)
-                {
-                    WaitBufferFree.Set();
-                }
-
+                WaitBufferFree.Set();
                 WaitBufferFree.Dispose();
             }
         }
