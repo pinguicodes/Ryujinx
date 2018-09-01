@@ -270,7 +270,14 @@ namespace Ryujinx.HLE.Gpu.Engines
 
                 Keys[(int)GalShaderType.Vertex] = VpBPos;
 
-                Gpu.Renderer.Shader.Create(Vmm, VpAPos, VpBPos, GalShaderType.Vertex);
+                if (IsShaderModified(Vmm, VpAPos) || IsShaderModified(Vmm, VpBPos))
+                {
+                    byte[] BinaryA = ReadShaderBinary(Vmm, VpAPos); 
+                    byte[] BinaryB = ReadShaderBinary(Vmm, VpBPos);
+
+                    Gpu.Renderer.Shader.Create(VpAPos, VpBPos, BinaryA, BinaryB, GalShaderType.Vertex);
+                }
+
                 Gpu.Renderer.Shader.Bind(VpBPos);
 
                 Index = 2;
@@ -297,7 +304,13 @@ namespace Ryujinx.HLE.Gpu.Engines
 
                 Keys[(int)Type] = Key;
 
-                Gpu.Renderer.Shader.Create(Vmm, Key, Type);
+                if (IsShaderModified(Vmm, Key))
+                {
+                    byte[] Binary = ReadShaderBinary(Vmm, Key);
+
+                    Gpu.Renderer.Shader.Create(0, Key, null, Binary, Type);
+                }
+
                 Gpu.Renderer.Shader.Bind(Key);
             }
 
@@ -890,6 +903,52 @@ namespace Ryujinx.HLE.Gpu.Engines
             Uploaded.Add(Key);
 
             return Vmm.IsRegionModified(Key, Size, Type);
+        }
+
+        private bool IsShaderModified(NvGpuVmm Vmm, long Key)
+        {
+            long Address = Vmm.GetPhysicalAddress(Key);
+
+            if (Gpu.Renderer.Shader.TryGetSize(Address, out long Size))
+            {
+                if (!QueryKeyUpload(Vmm, Address, Size, NvGpuBufferType.Shader))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private byte[] ReadShaderBinary(NvGpuVmm Vmm, long Key)
+        {
+            long Size = GetShaderSize(Vmm, Key);
+
+            long Address = Vmm.GetPhysicalAddress(Key);
+
+            return Vmm.ReadBytes(Key, Size);
+        }
+
+        private static long GetShaderSize(NvGpuVmm Vmm, long Position)
+        {
+            const int NopInst = 0x50b0;
+
+            long Offset = 0x50;
+
+            ulong OpCode = 0;
+
+            do
+            {
+                uint Word0 = (uint)Vmm.ReadInt32(Position + Offset + 0);
+                uint Word1 = (uint)Vmm.ReadInt32(Position + Offset + 4);
+
+                OpCode = Word0 | (ulong)Word1 << 32;
+
+                Offset += 8;
+            }
+            while ((OpCode >> 52 & 0xfff8) != NopInst && OpCode != 0);
+
+            return Offset - 8;
         }
     }
 }
